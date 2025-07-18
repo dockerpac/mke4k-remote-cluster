@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dex-web
+  namespace: mke
+data:
+  {{ (.Files.Glob "files/*").AsConfig | nindent 2 }}

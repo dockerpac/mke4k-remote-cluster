@@ -1,0 +1,270 @@
+{{- $global := .Values.global | default dict }}
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: K0sControlPlane
+metadata:
+  name: {{ include "k0scontrolplane.name" . }}
+spec:
+  replicas: {{ .Values.controlPlaneNumber }}
+  version: {{ .Values.k0s.version }}
+  updateStrategy: {{ .Values.k0s.updateStrategy }}
+  k0sConfigSpec:
+    {{- if $global.k0sURL }}
+    downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-amd64"
+    {{- end }}
+    files:
+      - content: |
+          kind: EncryptionConfig
+          apiVersion: v1
+          resources:
+            - resources:
+                - secrets
+              providers:
+                - aescbc:
+                    keys:
+                      - name: key
+                        secret: {{ .Values.k0s.encryptionKey }}
+        path: /var/lib/k0s/encryption.cfg
+        permissions: "0600"
+      - content: |
+          {{- .Values.k0s.clientRootCA.certificate | nindent 10 }}
+        path: /var/lib/k0s/pki/client-ca.crt
+        permissions: "0600"
+      - content: |
+          {{- .Values.k0s.clientRootCA.key | nindent 10 }}
+        path: /var/lib/k0s/pki/client-ca.key
+        permissions: "0600"
+    {{- if .Values.k0s.api.audit.enabled }}
+      {{- with .Values.k0s.api.audit.webhookConfigSecret }}
+      - contentFrom:
+          secretRef:
+            name: {{ . }}
+            key: value
+        path: /var/log/k0s/audit/webhook-config.yaml
+        permissions: "0600"
+      {{- end }}
+      - content: ""
+        path: {{ default "/var/log/k0s/audit/mke4_audit.log" .api.audit.logPath }}
+        permissions: "0600"
+      - content: |
+          apiVersion: audit.k8s.io/v1
+          kind: Policy
+          rules:
+          - level: {{ default "Metadata" .Values.k0s.api.audit.level }}
+        path: {{ default "/var/lib/k0s/mke4_audit_policy.yaml" .api.audit.policyFile }}
+        permissions: "0600"
+    {{- end }}
+    {{- if .Values.k0s.api.eventRateLimit.enabled }}
+      - content: |
+          apiVersion: apiserver.config.k8s.io/v1
+          kind: AdmissionConfiguration
+          plugins:
+            - name: EventRateLimit
+              path: /var/lib/k0s/event_rate_limit_config.yaml
+        path: /var/lib/k0s/admission_control_config.yaml
+        permissions: "0600"
+      - content: |
+          apiVersion: eventratelimit.admission.k8s.io/v1alpha1
+          kind: Configuration
+          limits:
+            {{- range .Values.k0s.api.eventRateLimit.limits }}
+            - type: {{ .limit }}
+              qps: {{ .limitQPS }}
+              burst: {{ .limitBurst }}
+              cacheSize: {{ .limitCacheSize }}
+            {{- end }}
+        path: /var/lib/k0s/event_rate_limit_config.yaml
+        permissions: "0600"
+    {{- end }}
+    {{- if or .Values.registry.image.caSecret .Values.registry.chart.caSecret }}
+      - content: |
+          version = 2
+  
+          [plugins."io.containerd.grpc.v1.cri".registry]
+            config_path = "/etc/containerd/certs.d"
+        path: "/etc/k0s/containerd.d/registry-config.toml"
+        permissions: "0644"
+      {{- range $_, $registryData := .Values.registry }}
+      {{- if $registryData.caSecret }}
+      - contentFrom:
+          secretRef:
+            name: {{ $registryData.caSecret }}
+            key: ca.crt
+        permissions: "0664"
+        path: /etc/containerd/certs.d/{{ (urlParse $registryData.url).host }}/ca.crt
+      {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
+    {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
+      {{- range $path, $secret := $certs }}
+      {{- if $secret }}
+      - contentFrom:
+          secretRef:
+            name: {{ $secret }}
+            key: ca.crt
+        permissions: "0664"
+        path: /usr/local/share/ca-certificates/{{ $path }}
+      {{- end }}
+      {{- end }}
+    {{- end }}
+    preStartCommands:
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
+    - "sudo update-ca-certificates"
+    {{- end }}
+    - |
+      /bin/sh -c "id -u kube-apiserver || \
+        useradd --home /var/lib/k0s --shell /sbin/nologin --system --no-create-home kube-apiserver && \
+        chown kube-apiserver:root /var/lib/k0s/pki/client-ca.crt && \
+        chown kube-apiserver:root /var/lib/k0s/pki/client-ca.key && \
+        {{- if .Values.k0s.api.eventRateLimit.enabled }}
+        chown kube-apiserver:root /var/lib/k0s/admission_control_config.yaml && \
+        chown kube-apiserver:root /var/lib/k0s/event_rate_limit_config.yaml && \
+        {{- end }}
+        {{- if .Values.k0s.api.audit.enabled }}
+          {{- with .Values.k0s.api.audit.webhookConfigSecret }}
+        chown kube-apiserver:root /var/log/k0s/audit/webhook-config.yaml && \
+          {{- end }}
+        chown kube-apiserver:root {{ default "/var/log/k0s/audit/mke4_audit.log" .api.audit.logPath }} && \
+        chown kube-apiserver:root {{ default "/var/lib/k0s/mke4_audit_policy.yaml" .api.audit.policyFile }} && \
+        {{- end }}
+        chown kube-apiserver:root /var/lib/k0s/encryption.cfg"
+    - |
+      cat > /var/lib/k0s/oidc-config.yaml <<EOF
+      apiVersion: apiserver.config.k8s.io/v1beta1
+      kind: AuthenticationConfiguration
+      jwt:
+        - claimMappings:
+            groups:
+              claim: groups
+              prefix: ""
+            uid: {}
+            username:
+              claim: email
+              prefix: ""
+          issuer:
+            audienceMatchPolicy: MatchAny
+            audiences:
+              - mke-dashboard
+              - kubelogin
+              {{- with .Values.mke.authentication.audience }}
+              {{- toYaml . | nindent 14 }} 
+              {{- end }}
+            certificateAuthority: |
+              {{- .Values.k0s.clientRootCA.certificate | nindent 14 }}
+            url: https://$(cat /etc/k0s.yaml | sed -nE 's/^.*"externalAddress":"([^"]*)".*$/\1/p'):33001/dex
+      EOF
+    - /bin/sh -c "chown kube-apiserver:root /var/lib/k0s/oidc-config.yaml && chmod 0600 /var/lib/k0s/oidc-config.yaml"
+    args:
+      - --debug=true
+      - --enable-metrics-scraper
+      - --enable-worker
+      - --kubelet-extra-args={{ include "kubeletArgs" .Values.k0s.kubelet.extraArgs }}
+      - --kubelet-root-dir={{ default "/var/lib/kubelet" .Values.k0s.kubelet.kubeletRootDir }}
+      - --disable-components=konnectivity-server,endpoint-reconciler
+      - --labels=mke/version={{ .Values.mke.version }}
+      - --profile={{ default "mke-default-manager" .Values.k0s.profile.manager }}
+    useSystemHostname: true
+    k0s:
+      apiVersion: k0s.k0sproject.io/v1beta1
+      kind: ClusterConfig
+      metadata:
+        name: k0s
+      spec:
+        {{- /*
+        These properties are set by k0smotron automatically:
+          - api.externalAddress
+          - network.clusterDomain
+          - network.podCIDR
+          - network.serviceCIDR
+        */}}
+        api:
+          extraArgs:
+            {{- include "k0sAPIExtraArgs" .Values.k0s | nindent 12 }}
+        storage:
+          type: etcd
+          etcd:
+            extraArgs:
+              {{- with .Values.k0s.etcd.storageQuota }}
+              quota-backend-bytes: {{ . }}
+              {{- end }}
+              {{- with .Values.k0s.etcd.tlsCipherSuites }}
+              cipher-suites: {{ . | join "," }}
+              {{- end }}
+        scheduler:
+          extraArgs:
+            {{- if not .Values.k0s.scheduler.bindToAll }}
+            bind-address: 127.0.0.1
+            {{- end }}
+            profiling: {{ .Values.k0s.scheduler.profilingEnabled | quote }}
+        controllerManager:
+          extraArgs:
+            {{- include "k0sControllerManagerExtraArgs" .Values.k0s.controllerManager | nindent 12 }}
+        telemetry:
+          enabled: {{ default true .Values.k0s.telemetry.enabled }}
+        network:
+          kubeProxy:
+            {{- toYaml .Values.k0s.network.kubeProxy | nindent 12 }}
+          provider: custom
+        {{- if .Values.registry.image.url }}
+        images:
+          metricsserver:
+            image: "{{ .Values.registry.image.url }}/k0sproject/metrics-server"
+          kubeproxy:
+            image: "{{ .Values.registry.image.url }}/k0sproject/kube-proxy"
+          coredns:
+            image: "{{ .Values.registry.image.url }}/k0sproject/coredns"
+          pause:
+            image: "{{ .Values.registry.image.url }}/k0sproject/pause"
+          calico:
+            cni:
+              image: "{{ .Values.registry.image.url }}/k0sproject/calico-cni"
+            node:
+              image: "{{ .Values.registry.image.url }}/k0sproject/calico-node"
+            kubecontrollers:
+              image: "{{ .Values.registry.image.url }}/k0sproject/calico-kube-controllers"
+        {{- end }}
+        extensions:
+          helm:
+            repositories:
+            {{- with .Values.k0s.extensions.repositories}}
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            charts:
+              {{- with .Values.k0s.extensions.charts }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+        workerProfiles:
+          - name: mke-default-worker
+            values:
+              eventRecordQPS: 50
+              kubeReserved:
+                cpu: 50m
+                ephemeral-storage: 500Mi
+                memory: 300Mi
+              maxPods: 110
+              podPidsLimit: -1
+              podsPerCore: 0
+              protectKernelDefaults: false
+              seccompDefault: false
+          - name: mke-default-manager
+            values:
+              eventRecordQPS: 50
+              kubeReserved:
+                cpu: 250m
+                ephemeral-storage: 4Gi
+                memory: 2Gi
+              maxPods: 110
+              podPidsLimit: -1
+              podsPerCore: 0
+              protectKernelDefaults: false
+              seccompDefault: false
+          {{- with .Values.k0s.kubelet.customProfiles }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: RemoteMachineTemplate
+      name: {{ include "remotemachinetemplate.controlplane.name" . }}
+      namespace: {{ .Release.Namespace }}
+

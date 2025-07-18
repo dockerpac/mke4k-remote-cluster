@@ -1,0 +1,130 @@
+# Schema generation:
+# $ helm plugin install https://github.com/losisin/helm-values-schema-json.git
+# $ helm schema --draft 2020 --indent 2 --no-additional-properties=false --schema-root.description='MKE child cluster for OpenStack CAPI provider' --values ./templates/cluster/mke4k-openstack/values.yaml --output ./templates/cluster/mke4k-openstack/values.schema.json
+
+# TODO: these values are from the k0rdent openstack chart and must be reviewed/reworked
+global:
+  registry: ""
+  k0sURL: ""
+  registryCertSecret: ""
+  k0sURLCertSecret: ""
+
+# Cluster parameters
+controlPlaneNumber: 3 # @schema description: The number of the control-plane machines; minimum: 1; type: integer; required: true
+workersNumber: 2 # @schema description: The number of the worker machines; minimum: 1; type: integer; required: true
+
+clusterNetwork:  # @schema description: The cluster network configuration; type: object
+  apiServerHost: 192.168.1.11 # @schema description: The host address the API Server should bind to; type: string
+  apiServerPort: 6443 # @schema description: The port the API Server should bind to; type: integer; minimum: 1; maximum: 65535
+  pods: # @schema description: The network ranges from which Pod networks are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
+    - "192.168.0.0/16"
+  services: # @schema description: The network ranges from which service VIPs are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
+    - "10.96.0.0/16"
+  serviceDomain: "cluster.local" # @schema description: Kubernetes internal service domain
+
+clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
+
+identityRef: # @schema description: OpenStack cluster identity object reference; type: object; required: true
+  name: "" # @schema description: Name of the identity; type: string; required: true
+  cloudName: "" # @schema description: Name of the entry in the clouds.yaml file to use; type: string; required: true
+  region: "" # @schema description: OpenStack region; type: string; required: true
+  caCert: # @schema description: Reference to the secret with the content of a custom CA; type: object
+    secretName: "" # @schema description: The name of the secret with a custom CA in kube-system namespace; type: string
+    path: /etc/cacert # @schema description: The directory where the secret with a custom CA will be mounted; type: string
+
+
+# K0s parameters
+k0s: # @schema description: K0s parameters; type: object; required: true
+  version: v1.32.3+k0s.0 # @schema description: K0s version; type: string; required: true
+  updateStrategy: Recreate # @schema description: K0s update strategy; type: string; required: true; default: Recreate; enum: [Recreate, InPlace]
+  profile: # @schema description: Profile names for CP and worker nodes; type: object
+    manager: "" # @schema description: CP nodes profile name; default: mke-default-manager
+    worker: "" # @schema description: Worker nodes profile name; default: mke-default-worker
+  api: # @schema description: Kubernetes API server parameters; type: object
+    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
+    profilingEnabled: false # @schema description: K0s profiling install flag value; default: false
+    audit: # @schema description: K0s audit feature configuration; type: object; required: true
+      enabled: false # @schema description: Whether audit enabled; default: false
+      webhookConfigSecret: "" # @schema description: The name of the Secret object that contains webhook configuration under the value key
+      logPath: "/var/log/k0s/audit/mke4_audit.log" # @schema description: Audit log file path; default: /var/log/k0s/audit/mke4_audit.log
+      maxAge: 30 # @schema description: Audit records max age; default: 30
+      maxBackup: 10 # @schema description: Audit records max backup: default: 10
+      maxSize: 10 # @schema description: Audit records max size: default: 10
+      policyFile: "/var/lib/k0s/mke4_audit_policy.yaml" # @schema description: Audit policy file path: default: /var/lib/k0s/mke4_audit_policy.yaml
+      level: "Metadata" # @schema description: Audit log level; default: Metadata
+    tlsCipherSuites: [] # @schema description: API server TLS Cipher Suites; type: array; item: string; itemEnum: [TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384,TLS_CHACHA20_POLY1305_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_RSA_WITH_RC4_128_SHA,TLS_RSA_WITH_3DES_EDE_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_256_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA256,TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,TLS_ECDHE_RSA_WITH_RC4_128_SHA,TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256]
+    eventRateLimit: # @schema description: API server event rate limit configuration type: object; required: true
+      enabled: false # @schema description: Whether event rate limit enabled; default: false
+      limits: [] # @schema description: API server event rate limits; type: array; item: object
+    alwaysPullImages: false # @schema description: Whether AlwaysPullImages admission plugin enabled; default: false
+    requestTimeout: "1m0s" # @schema description: K0s --request-timeout install flag value; default: 1m0s
+  network: # @schema description: K0s network configuration; type: object; required: true
+    nodePortRange: "32768-35535" # @schema: description: K0s node port range; required: true; default: 32768-35535
+    kubeProxy: # @schema description: Kube proxy configuration; type: object; required: true
+      metricsBindAddress: 0.0.0.0:10249
+      mode: iptables
+  scheduler: # @schema description: K0s scheduler configuration; type: object; required: true
+    profilingEnabled: false # @schema description: Scheduler --profiling extra arg value; default: false
+    bindToAll: false # @schema description: Whether --bind-address=127.0.0.1 scheduler extra arg added; default: false
+  controllerManager: # @schema description: K0s controller manager configuration; type: object; required: true
+    profilingEnabled: false # @schema description: Controller manager --profiling extra arg value; default: false
+    terminatedPodGCThreshold: 12500 # @schema description: Controller manager --terminated-pod-gc-threshold extra arg value; default: 12500
+    extraArgs: {} # @schema description: Additional controller manager extra args; type: object; additionalProperties: true
+  kubelet: # @schema description: K0s kubelet configuration; type: object; required: true
+    extraArgs: {} # @schema description: Kubelet extra args; type: object; additionalProperties: true
+    customProfiles: [] # @schema description: List of custom kubelet profiles; type: array; item: object
+    kubeletRootDir: "/var/lib/kubelet" # @schema description: Kubelet root directory; default: /var/lib/kubelet
+  extensions: # @schema description: K0s extensions; type: object; required: true
+    repositories: [] # @schema description: K0s extension repositories; type: array; item: object
+    charts: [] # @schema description: K0s extension helm charts (e.g. CNI); type: array; item: object
+  telemetry: # @schema description: K0s telemetry configuration; type: object; required: true
+    enabled: true # @schema description: Whether k0s telemetry enabled; default: false
+  encryptionKey: "" # @schema description: EncryptionConfig key; type: string; required: true
+  clientRootCA: # @schema description: Client root CA certificate; type: object; required: true
+    certificate: "" # @schema description: Client root CA crt part; type: string; required: true
+    key: "" # @schema description: Client root CA ket part; type: string; required: true
+  etcd: # @schema description: K0s etcd configuration; type: object; required: true
+    storageQuota: "" # @schema description: K0s etc --quota-backend-bytes arg value; type: string
+    tlsCipherSuites: [] # @schema description: Etcd --cipher-suites arg values list; type: array; item: string; itemEnum: [TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384,TLS_CHACHA20_POLY1305_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_RSA_WITH_RC4_128_SHA,TLS_RSA_WITH_3DES_EDE_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_256_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA256,TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,TLS_ECDHE_RSA_WITH_RC4_128_SHA,TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256]
+
+registry: # @schema description: Registries configuration; type: object; required: true
+  image: # @schema description: Docker image registry configuration; type: object; required: true
+    url: "" # @schema description: Docker registry address; type: string
+    caSecret: "" # @schema description: Secret name that contains docker registry CA certificate (keys ca.crt and ca.key); type: string
+  chart: # @schema description: Helm repository configuration; type: object; required: true
+    url: "" # @schema description: Helm repository address; type: string
+    caSecret: "" # @schema description: Secret name that contains helm repository CA certificate (keys ca.crt and ca.key); type: string
+
+mke: # @schema description: MKE configuration; type: object; required: true
+  version: 4.1.1 # @schema description: MKE version; type: string; required: true
+  authentication: # @schema description: MKE authentication configuration; type: object; required: true
+    audience: [] # @schema description: List of additional JWT audiences that will be added to the AuthenticationConfiguration config; type: array; item: string
+
+# Remote machine pools configuration
+remoteMachines: # @schema description: Configuration for remote machine pools; type: object
+  controlPlane: # @schema description: Control plane machines configuration; type: array
+    - name: cp-1 # @schema description: Name of the machine; type: string
+      address: 192.168.1.11 # @schema description: IP address or hostname of the machine; type: string
+      port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
+      user: ubuntu # @schema description: SSH user; type: string
+      useSudo: true # @schema description: Whether to use sudo; type: boolean; default: true
+      sshKeyRef: # @schema description: SSH key reference; type: object
+        name: ssh-key # @schema description: Name of the SSH key secret; type: string
+  worker: # @schema description: Worker machines configuration; type: array
+    - name: worker-1 # @schema description: Name of the machine; type: string
+      address: 192.168.1.21 # @schema description: IP address or hostname of the machine; type: string
+      port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
+      user: ubuntu # @schema description: SSH user; type: string
+      useSudo: true # @schema description: Whether to use sudo; type: boolean; default: true
+      sshKeyRef: # @schema description: SSH key reference; type: object
+        name: ssh-key # @schema description: Name of the SSH key secret; type: string
+    - name: worker-2 # @schema description: Name of the machine; type: string
+      address: 192.168.1.22 # @schema description: IP address or hostname of the machine; type: string
+      port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
+      user: ubuntu # @schema description: SSH user; type: string
+      useSudo: true # @schema description: Whether to use sudo; type: boolean; default: true
+      sshKeyRef: # @schema description: SSH key reference; type: object
+        name: ssh-key # @schema description: Name of the SSH key secret; type: string

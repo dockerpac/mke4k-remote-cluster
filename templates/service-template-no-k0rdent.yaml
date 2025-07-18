@@ -1,0 +1,169 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: jetstack
+  namespace: $KCM_NAMESPACE
+  labels:
+    k0rdent.mirantis.com/managed: "true"
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/resource-policy: keep
+spec:
+  url: https://charts.jetstack.io
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  name: cert-manager-1-16-3
+  namespace: $KCM_NAMESPACE
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  helm:
+    chartSpec:
+      chart: cert-manager
+      version: 1.16.3
+      interval: 10m0s
+      sourceRef:
+        kind: HelmRepository
+        name: jetstack
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  labels:
+    k0rdent.mirantis.com/component: kcm
+  name: ingress-nginx-4-12-1
+  namespace: $KCM_NAMESPACE
+spec:
+  helm:
+    chartSpec:
+      chart: mirrored-chart-ingress-nginx
+      interval: 10m0s
+      reconcileStrategy: ChartVersion
+      sourceRef:
+        kind: HelmRepository
+        name: mirantiscontainers
+      version: 4.12.1
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  labels:
+    k0rdent.mirantis.com/component: kcm
+  name: dex-0-23-0
+  namespace: $KCM_NAMESPACE
+spec:
+  helm:
+    chartSpec:
+      chart: mirrored-chart-dex
+      interval: 10m0s
+      reconcileStrategy: ChartVersion
+      sourceRef:
+        kind: HelmRepository
+        name: mirantiscontainers
+      version: v0.23.0
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  labels:
+    k0rdent.mirantis.com/component: kcm
+  name: dex-http-server-0-3-0
+  namespace: $KCM_NAMESPACE
+spec:
+  helm:
+    chartSpec:
+      chart: dex-http-server-chart
+      interval: 10m0s
+      reconcileStrategy: ChartVersion
+      sourceRef:
+        kind: HelmRepository
+        name: mirantiscontainers
+      version: 0.3.0
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  labels:
+    k0rdent.mirantis.com/component: kcm
+  name: kube-prometheus-stack-57-2-0
+  namespace: $KCM_NAMESPACE
+spec:
+  helm:
+    chartSpec:
+      chart: mirrored-chart-kube-prometheus-stack
+      interval: 10m0s
+      reconcileStrategy: ChartVersion
+      sourceRef:
+        kind: HelmRepository
+        name: mirantiscontainers
+      version: 57.2.0
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  labels:
+    k0rdent.mirantis.com/component: kcm
+  name: mke-dashboard-1-6-2
+  namespace: $KCM_NAMESPACE
+spec:
+  helm:
+    chartSpec:
+      chart: mke-dashboard-chart
+      interval: 10m0s
+      reconcileStrategy: ChartVersion
+      sourceRef:
+        kind: HelmRepository
+        name: mirantiscontainers
+      version: 1.6.2
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  labels:
+    k0rdent.mirantis.com/component: kcm
+  name: node-feature-discovery-0-17-2
+  namespace: $KCM_NAMESPACE
+spec:
+  helm:
+    chartSpec:
+      chart: mirrored-chart-node-feature-discovery
+      interval: 10m0s
+      reconcileStrategy: ChartVersion
+      sourceRef:
+        kind: HelmRepository
+        name: mirantiscontainers
+      version: 0.17.2
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  name: mke-support-objects-0-1-0
+  namespace: $KCM_NAMESPACE
+spec:
+  helm:
+    chartSpec:
+      chart: mke-support-objects
+      interval: 10m0s
+      reconcileStrategy: ChartVersion
+      sourceRef:
+        kind: HelmRepository
+        name: templates-repository
+      version: 0.1.0
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  name: dex-web-static-0-1-0
+  namespace: $KCM_NAMESPACE
+spec:
+  helm:
+    chartSpec:
+      chart: dex-web-static
+      interval: 10m0s
+      reconcileStrategy: ChartVersion
+      sourceRef:
+        kind: HelmRepository
+        name: templates-repository
+      version: 0.1.0

@@ -1,0 +1,592 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterDeployment
+metadata:
+  name: remote-mke
+  namespace: k0rdent
+spec:
+  template: mke4k-remote-cluster-standalone-cp-0-0-1 
+  credential: remote-cred
+  config:
+    controlPlaneNumber: 1
+    workersNumber: 1
+    clusterNetwork:
+      apiServerHost: 10.0.0.63
+      apiServerPort: 6443
+    remoteMachines:
+      controlPlane:
+      - name: cp-0
+        address: 10.0.0.63
+        port: 22
+        user: ubuntu
+        useSudo: true
+        sshKeyRef:
+          name: remote-ssh-key
+      worker:
+      - name: worker-0
+        address: 10.0.0.111
+        port: 22
+        user: ubuntu
+        useSudo: true
+        sshKeyRef:
+          name: remote-ssh-key
+      - name: worker-1
+        address: 10.0.0.96
+        port: 22
+        user: ubuntu
+        useSudo: true
+        sshKeyRef:
+          name: remote-ssh-key
+      - name: worker-2
+        address: 10.0.0.85
+        port: 22
+        user: ubuntu
+        useSudo: true
+        sshKeyRef:
+          name: remote-ssh-key
+    k0s:
+      version: v1.32.6+k0s.0
+      extensions:
+        charts:
+          - chartname: oci://ghcr.io/mirantiscontainers/mirrored-chart-tigera-operator
+            name: tigera-operator
+            namespace: tigera-operator
+            order: 1
+            timeout: 10m0s
+            values: |-
+              kubeletVolumePluginPath: /var/lib/kubelet
+              installation:
+                registry: ghcr.io/mirantiscontainers/
+                logging:
+                  cni:
+                    logSeverity: Info
+                cni:
+                  type: Calico
+                kubeletVolumePluginPath: /var/lib/kubelet
+                calicoNetwork:
+                  bgp: Disabled
+                  linuxDataplane: Iptables
+                  ipPools:
+                  - cidr: 192.168.0.0/16
+                    encapsulation: VXLAN
+                    blockSize: 26
+              resources:
+                requests:
+                  cpu: 250m
+              tigeraOperator:
+                version: v1.36.7
+                registry: ghcr.io/mirantiscontainers/
+              defaultFelixConfiguration:
+                enabled: true
+                logSeveritySys: Info
+                ipsecLogLevel: Info
+                bpfLogLevel: Info
+                vxlanPort: 4789
+                vxlanVNI: 10000
+            version: v3.29.3
+      encryptionKey: eUYrVmNcUr+LuEp9m4f3980NWEg87gIfcWgj9/oPGCM=
+      clientRootCA:
+        certificate: |
+          -----BEGIN CERTIFICATE-----
+          MIIBmTCCAUCgAwIBAgIUCPgAINEBEnErfaDED+bhjf6hp1cwCgYIKoZIzj0EAwIw
+          KzEMMAoGA1UEChMDbWtlMRswGQYDVQQDExJNS0UgQ2xpZW50IFJvb3QgQ0EwHhcN
+          MjUwNTA5MTA1MTAwWhcNMzUwNTA3MTA1MTAwWjArMQwwCgYDVQQKEwNta2UxGzAZ
+          BgNVBAMTEk1LRSBDbGllbnQgUm9vdCBDQTBZMBMGByqGSM49AgEGCCqGSM49AwEH
+          A0IABLjdP6eWPeMZAWGhO6Dijekr6sw6TUA9xvCmcNgS5PqZQZIuoKGxnIAvGWsa
+          c1pmheemekVj9cP+dSdFl94cirejQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMB
+          Af8EBTADAQH/MB0GA1UdDgQWBBSWRKPmpdTeY4Cg5FnQcSXIrU0s9DAKBggqhkjO
+          PQQDAgNHADBEAiBWezG7F7K5faYY2ZhOzKZpt9y1mbZfDdXLRUfq1DbeZwIgVpFh
+          K6JqEQctKThgAwcmK2IL7qS5KJWRpQW+09NWt+g=
+          -----END CERTIFICATE-----
+        key: |
+          -----BEGIN EC PRIVATE KEY-----
+          MHcCAQEEIGee6wCUVwvU1djkryadwwZwSoDV2TZFBEI9bxqrs9bEoAoGCCqGSM49
+          AwEHoUQDQgAEuN0/p5Y94xkBYaE7oOKN6SvqzDpNQD3G8KZw2BLk+plBki6gobGc
+          gC8ZaxpzWmaF56Z6RWP1w/51J0WX3hyKtw==
+          -----END EC PRIVATE KEY-----
+  serviceSpec:
+    services:
+      - name: cert-manager
+        namespace: mke
+        template: cert-manager-1-16-3
+        values: |
+          crds:
+            enabled: true
+            keep: false
+          image:
+            repository: registry.mirantis.com/k0rdent-enterprise/cert-manager-controller
+          webhook:
+            image:
+              repository: registry.mirantis.com/k0rdent-enterprise/cert-manager-webhook
+            tolerations:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+                effect: NoSchedule
+          cainjector:
+            image:
+              repository: registry.mirantis.com/k0rdent-enterprise/cert-manager-cainjector
+            tolerations:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+                effect: NoSchedule
+          startupapicheck:
+            image:
+              repository: registry.mirantis.com/k0rdent-enterprise/cert-manager-startupapicheck
+            tolerations:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+                effect: NoSchedule
+          tolerations:
+            - key: node-role.kubernetes.io/master
+              operator: Exists
+              effect: NoSchedule
+      - name: mke-certificates
+        namespace: mke
+        template: mke-support-objects-0-1-0
+        values: |
+          extraObjects:
+            - apiVersion: v1
+              kind: Secret
+              metadata:
+                name: client-root-ca
+                namespace: mke
+              type: kubernetes.io/tls
+              stringData:
+                tls.crt: |
+                  -----BEGIN CERTIFICATE-----
+                  MIIBmTCCAUCgAwIBAgIUCPgAINEBEnErfaDED+bhjf6hp1cwCgYIKoZIzj0EAwIw
+                  KzEMMAoGA1UEChMDbWtlMRswGQYDVQQDExJNS0UgQ2xpZW50IFJvb3QgQ0EwHhcN
+                  MjUwNTA5MTA1MTAwWhcNMzUwNTA3MTA1MTAwWjArMQwwCgYDVQQKEwNta2UxGzAZ
+                  BgNVBAMTEk1LRSBDbGllbnQgUm9vdCBDQTBZMBMGByqGSM49AgEGCCqGSM49AwEH
+                  A0IABLjdP6eWPeMZAWGhO6Dijekr6sw6TUA9xvCmcNgS5PqZQZIuoKGxnIAvGWsa
+                  c1pmheemekVj9cP+dSdFl94cirejQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMB
+                  Af8EBTADAQH/MB0GA1UdDgQWBBSWRKPmpdTeY4Cg5FnQcSXIrU0s9DAKBggqhkjO
+                  PQQDAgNHADBEAiBWezG7F7K5faYY2ZhOzKZpt9y1mbZfDdXLRUfq1DbeZwIgVpFh
+                  K6JqEQctKThgAwcmK2IL7qS5KJWRpQW+09NWt+g=
+                  -----END CERTIFICATE-----
+                tls.key: |
+                  -----BEGIN EC PRIVATE KEY-----
+                  MHcCAQEEIGee6wCUVwvU1djkryadwwZwSoDV2TZFBEI9bxqrs9bEoAoGCCqGSM49
+                  AwEHoUQDQgAEuN0/p5Y94xkBYaE7oOKN6SvqzDpNQD3G8KZw2BLk+plBki6gobGc
+                  gC8ZaxpzWmaF56Z6RWP1w/51J0WX3hyKtw==
+                  -----END EC PRIVATE KEY-----
+            - apiVersion: cert-manager.io/v1
+              kind: ClusterIssuer
+              metadata:
+                name: mke-client-ca-issuer
+              spec:
+                ca:
+                  secretName: client-root-ca
+            - apiVersion: cert-manager.io/v1
+              kind: Certificate
+              metadata:
+                name: mke-auth-grpc-cert
+                namespace: mke
+              spec:
+                dnsNames:
+                  - authentication-dex
+                ipAddresses:
+                  - {{ .Cluster.spec.controlPlaneEndpoint.host }}
+                issuerRef:
+                  kind: ClusterIssuer
+                  name: mke-client-ca-issuer
+                secretName: auth-grpc.tls
+            - apiVersion: cert-manager.io/v1
+              kind: Certificate
+              metadata:
+                name: mke-auth-https-cert
+                namespace: mke
+              spec:
+                ipAddresses:
+                  - {{ .Cluster.spec.controlPlaneEndpoint.host }}
+                issuerRef:
+                  kind: ClusterIssuer
+                  name: mke-client-ca-issuer
+                secretName: auth-https.tls
+            - apiVersion: cert-manager.io/v1
+              kind: Certificate
+              metadata:
+                name: mke-ingress-cert
+                namespace: mke
+              spec:
+                ipAddresses:
+                  - {{ .Cluster.spec.controlPlaneEndpoint.host }}
+                issuerRef:
+                  kind: ClusterIssuer
+                  name: mke-client-ca-issuer
+                secretName: mke-ingress.tls
+      - name: nginx
+        namespace: mke
+        template: ingress-nginx-4-12-1
+        values: |
+          controller:
+            admissionWebhooks:
+              certManager:
+                enabled: true
+              patch:
+                enabled: false
+                image:
+                  digest: ""
+                  digestChroot: ""
+                  registry: ghcr.io/mirantiscontainers
+            affinity:
+              nodeAffinity: {}
+            containerPort:
+              http: 80
+              https: 443
+            extraArgs:
+              default-ssl-certificate: mke/mke-ingress.tls
+              enable-ssl-passthrough: "false"
+              http-port: "80"
+              https-port: "443"
+            image:
+              digest: ""
+              digestChroot: ""
+              registry: ghcr.io/mirantiscontainers
+            ingressClass: nginx-default
+            ingressClassResource:
+              default: true
+              name: nginx-default
+            replicaCount: 2
+            service:
+              enableHTTP: true
+              enableHTTPS: true
+              externalTrafficPolicy: Cluster
+              nodePorts:
+                http: 33000
+                https: 33001
+              ports: {}
+              type: NodePort
+            tolerations:
+            - effect: NoSchedule
+              key: node-role.kubernetes.io/master
+              operator: Exists
+              value: ""
+          global:
+            image:
+              registry: ghcr.io/mirantiscontainers
+      - name: dex-web-static
+        namespace: mke
+        template: dex-web-static-0-1-0
+      - name: authentication
+        namespace: mke
+        template: dex-0-23-0
+        values: |
+          config:
+            issuer: https://{{ .Cluster.spec.controlPlaneEndpoint.host }}:33001/dex
+            storage:
+              type: kubernetes
+              config:
+                inCluster: true
+            web:
+              http: 127.0.0.1:5556
+              https: 127.0.0.1:5554
+              tlsCert: /etc/dex/certs/tls/tls.crt
+              tlsKey: /etc/dex/certs/tls/tls.key
+              tlsMinVersion: 1.2
+              tlsMaxVersion: 1.3
+            grpc:
+              addr: 127.0.0.1:5557
+              tlsCert: /etc/dex/certs/grpc/tls.crt
+              tlsKey: /etc/dex/certs/grpc/tls.key
+              tlsClientCA: /etc/dex/certs/grpc/ca.crt
+            frontend:
+              issuer: Mirantis Kubernetes Engine
+              dir: /srv/dex/web
+              theme: light
+            oauth2:
+              skipApprovalScreen: true
+            staticClients:
+            - id: mke-dashboard
+              redirectURIs:
+              - https://127.0.0.1:3000
+              - https://localhost:3000
+              - https://{{ .Cluster.spec.controlPlaneEndpoint.host }}:33001
+              name: MKE Dashboard
+              secret: WFpBHxlwUkbexwTZzIpDra24v
+            enablePasswordDB: true
+          volumeMounts:
+          - name: https
+            mountPath: /etc/dex/certs/tls/
+            readOnly: true
+          - name: dex-web
+            mountPath: /srv/dex/web
+            readOnly: true
+          - name: grpc
+            mountPath: /etc/dex/certs/grpc/
+            readOnly: true
+          volumes:
+          - name: https
+            secret:
+              secretName: auth-https.tls
+          - name: dex-web
+            configMap:
+              name: dex-web
+              items:
+              - key: approval.html
+                path: templates/approval.html
+              - key: atlassian-crowd-icon.svg
+                path: static/img/atlassian-crowd-icon.svg
+              - key: bitbucket-icon.svg
+                path: static/img/bitbucket-icon.svg
+              - key: device.html
+                path: templates/device.html
+              - key: device_success.html
+                path: templates/device_success.html
+              - key: email-icon.svg
+                path: static/img/email-icon.svg
+              - key: error.html
+                path: templates/error.html
+              - key: footer.html
+                path: templates/footer.html
+              - key: gitea-icon.svg
+                path: static/img/gitea-icon.svg
+              - key: github-icon.svg
+                path: static/img/github-icon.svg
+              - key: gitlab-icon.svg
+                path: static/img/gitlab-icon.svg
+              - key: google-icon.svg
+                path: static/img/google-icon.svg
+              - key: header.html
+                path: templates/header.html
+              - key: keystone-icon.svg
+                path: static/img/keystone-icon.svg
+              - key: ldap-icon.svg
+                path: static/img/ldap-icon.svg
+              - key: linkedin-icon.svg
+                path: static/img/linkedin-icon.svg
+              - key: login.html
+                path: templates/login.html
+              - key: logo.svg
+                path: themes/light/logo.svg
+              - key: main.css
+                path: static/main.css
+              - key: microsoft-icon.svg
+                path: static/img/microsoft-icon.svg
+              - key: oidc-icon.svg
+                path: static/img/oidc-icon.svg
+              - key: oob.html
+                path: templates/oob.html
+              - key: password.html
+                path: templates/password.html
+              - key: robots.txt
+                path: robots.txt
+              - key: saml-icon.svg
+                path: static/img/saml-icon.svg
+              - key: styles.css
+                path: themes/light/styles.css
+          - name: grpc
+            secret:
+              secretName: auth-grpc.tls
+          https:
+            enabled: true
+          grpc:
+            enabled: true
+          service:
+            type: ClusterIP
+          tolerations:
+          - key: node-role.kubernetes.io/master
+            operator: Exists
+            value: ""
+            effect: NoSchedule
+            tolerationseconds: null
+          ingress:
+            enabled: true
+            className: nginx-default
+            hosts:
+            - host: ""
+              paths:
+              - path: /dex
+                pathType: Prefix
+          image:
+            repository: ghcr.io/mirantiscontainers/dexidp/dex
+      - name: dex-http-server
+        namespace: mke
+        template: dex-http-server-0-3-0
+        values: |
+          image:
+            repository: ghcr.io/mirantiscontainers/dex-http-server
+            tag: v0.7.0
+          tolerations:
+          - key: node-role.kubernetes.io/master
+            operator: Exists
+            value: ""
+            effect: NoSchedule
+            tolerationseconds: null
+          nodeSelector:
+            node-role.kubernetes.io/control-plane: "true"
+          ingress:
+            enabled: true
+            annotations:
+              nginx.ingress.kubernetes.io/rewrite-target: /$2
+            className: nginx-default
+            hosts:
+            - host: ""
+              paths:
+              - path: /api/dex(/|$)(.*)
+                pathType: ImplementationSpecific
+      - name: monitoring
+        namespace: mke
+        template: kube-prometheus-stack-57-2-0
+        values: |
+          global:
+              imageRegistry: ghcr.io/mirantiscontainers
+          grafana:
+              enabled: true
+              tolerations:
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                    value: ""
+                    effect: NoSchedule
+                    tolerationseconds: null
+          alertmanager:
+              enabled: false
+              alertmanagerSpec:
+                  tolerations:
+                      - key: node-role.kubernetes.io/master
+                        operator: Exists
+                        value: ""
+                        effect: NoSchedule
+                        tolerationseconds: null
+          kubeEtcd:
+              service: {}
+              serviceMonitor: {}
+          prometheus:
+              prometheusSpec:
+                  serviceMonitorSelectorNilUsesHelmValues: false
+                  serviceMonitorNamespaceSelector:
+                      matchExpressions:
+                          - key: kubernetes.io/metadata.name
+                            operator: Exists
+                  tolerations:
+                      - key: node-role.kubernetes.io/master
+                        operator: Exists
+                        value: ""
+                        effect: NoSchedule
+          kubelet:
+              serviceMonitor:
+                  cAdvisor: true
+          kube-state-metrics:
+              tolerations:
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                    value: ""
+                    effect: NoSchedule
+                    tolerationseconds: null
+          prometheusOperator:
+              tolerations:
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                    value: ""
+                    effect: NoSchedule
+                    tolerationseconds: null
+              admissionWebhooks:
+                  patch:
+                      tolerations:
+                          - key: node-role.kubernetes.io/master
+                            operator: Exists
+                            value: ""
+                            effect: NoSchedule
+                            tolerationseconds: null
+      - name: prometheus-service-monitors
+        namespace: mke
+        template: mke-support-objects-0-1-0
+        values: |
+          extraObjects:
+            - apiVersion: monitoring.coreos.com/v1
+              kind: ServiceMonitor
+              metadata:
+                name: k0s
+                namespace: mke
+                labels:
+                  app: kube-prometheus-stack-prometheus
+                  app.kubernetes.io/instance: monitoring
+                  app.kubernetes.io/part-of: kube-prometheus-stack
+                  app.kubernetes.io/version: 57.2.0
+                  chart: kube-prometheus-stack-57.2.0
+                  heritage: Helm
+                  release: monitoring
+              spec:
+                endpoints:
+                  - port: http
+                    metricRelabelings:
+                      - sourceLabels:
+                          - exported_job
+                        targetLabel: job
+                namespaceSelector:
+                  matchNames:
+                    - k0s-system
+                selector:
+                  matchLabels:
+                    app: k0s-observability
+                    component: pushgateway
+                    k0s.k0sproject.io/stack: metrics
+      - name: ui
+        namespace: mke
+        template: mke-dashboard-1-6-2
+        values: |
+          image:
+              repository: ghcr.io/mirantiscontainers/mke-dashboard
+              tag: v1.6.2
+          tolerations:
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+                value: ""
+                effect: NoSchedule
+                tolerationseconds: null
+          nodeSelector:
+              node-role.kubernetes.io/control-plane: "true"
+          ingress:
+              enabled: true
+              className: nginx-default
+              hosts:
+                  - host: ""
+                    paths:
+                      - path: /
+                        pathType: Prefix
+      - name: node-feature-discovery
+        namespace: mke
+        template: node-feature-discovery-0-17-2
+        values: |
+          image:
+              repository: ghcr.io/mirantiscontainers/nfd/node-feature-discovery
+          master:
+              nodeSelector:
+                  kubernetes.io/os: linux
+          worker:
+              nodeSelector:
+                  kubernetes.io/os: linux
+              tolerations:
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                    effect: NoSchedule
+          gc:
+              tolerations:
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                    effect: NoSchedule
+      - name: dex-admin-user
+        namespace: mke
+        template: mke-support-objects-0-1-0
+        values: |
+          extraObjects:
+            - apiVersion: dex.coreos.com/v1
+              email: admin
+              hash: JDJhJDEwJFdrclAuQTFaTWEvSnlJMjhITE95aXU4UGF1RmN2a3FtL1p1ZG5EeWVCS0FrSEtJZEN6UmM2
+              kind: Password
+              metadata:
+                name: mfsg22lozpzjzzeeeirsk
+                namespace: mke
+              userID: 0848fd98-32b3-47a4-9b4b-1857d239aeb6
+              username: admin
+            - apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: mke-cluster-admin
+              roleRef:
+                apiGroup: rbac.authorization.k8s.io
+                kind: ClusterRole
+                name: cluster-admin
+              subjects:
+                - apiGroup: rbac.authorization.k8s.io
+                  kind: User
+                  name: admin
