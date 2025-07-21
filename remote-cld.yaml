@@ -14,7 +14,7 @@ spec:
       apiServerPort: 6443
     remoteMachines:
       controlPlane:
-      - name: cp-0
+      - name: pac-worker-2
         address: 10.0.0.63
         port: 22
         user: ubuntu
@@ -22,21 +22,21 @@ spec:
         sshKeyRef:
           name: remote-ssh-key
       worker:
-      - name: worker-0
+      - name: pac-worker-3
         address: 10.0.0.111
         port: 22
         user: ubuntu
         useSudo: true
         sshKeyRef:
           name: remote-ssh-key
-      - name: worker-1
+      - name: pac-worker-4
         address: 10.0.0.96
         port: 22
         user: ubuntu
         useSudo: true
         sshKeyRef:
           name: remote-ssh-key
-      - name: worker-2
+      - name: pac-worker-5
         address: 10.0.0.85
         port: 22
         user: ubuntu
