@@ -463,6 +463,7 @@ spec:
                         value: ""
                         effect: NoSchedule
           kubelet:
+              kubeletRootDir: /var/lib/k0s/kubelet # not using /var/lib/kubelet until https://github.com/k0sproject/k0smotron/issues/1114 is fixed
               serviceMonitor:
                   cAdvisor: true
           kube-state-metrics:

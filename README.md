@@ -164,4 +164,4 @@ Edit and adapt contents of `remote-cld.yaml`
 
 # Issues
 - RemoteMachines are not deleted automatically when deleting the ClusterDeployment. Workaround is to first delete the Cluster, then after RemoteMachines are deleted, you can delete the ClusterDeployment
-- /var/lib/kubelet is not emptied. Possibly a bug that is not related to remote ssh provider
+- /var/lib/kubelet is not emptied. For now, using /var/lib/k0s/kubelet while https://github.com/k0sproject/k0smotron/issues/1114 is not fixed
