@@ -9,7 +9,7 @@ spec:
       pool: cp
 
 ---
-{{- range $index, $machine := .Values.remoteMachines.controlPlane }}
+{{- range $index, $machine := .Values.infrastructure.remoteMachines.controlPlane }}
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: PooledRemoteMachine
 metadata:

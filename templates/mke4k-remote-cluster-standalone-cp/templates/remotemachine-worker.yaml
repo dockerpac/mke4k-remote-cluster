@@ -9,7 +9,7 @@ spec:
       pool: worker
 
 ---
-{{- range $index, $machine := .Values.remoteMachines.worker }}
+{{- range $index, $machine := .Values.infrastructure.remoteMachines.worker }}
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: PooledRemoteMachine
 metadata:

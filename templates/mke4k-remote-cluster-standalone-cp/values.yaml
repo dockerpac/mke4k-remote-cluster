@@ -9,40 +9,57 @@ global:
   registryCertSecret: ""
   k0sURLCertSecret: ""
 
-# Cluster parameters
-controlPlaneNumber: 3 # @schema description: The number of the control-plane machines; minimum: 1; type: integer; required: true
-workersNumber: 2 # @schema description: The number of the worker machines; minimum: 1; type: integer; required: true
+infrastructure:
+  controlPlaneNumber: 3 # @schema description: The number of the control-plane machines; minimum: 1; type: integer; required: true
+  workersNumber: 2 # @schema description: The number of the worker machines; minimum: 1; type: integer; required: true
 
-clusterNetwork:  # @schema description: The cluster network configuration; type: object
+  clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+  clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
+
+  # RemoteProvider specific configuration
   apiServerHost: 192.168.1.11 # @schema description: The host address the API Server should bind to; type: string
   apiServerPort: 6443 # @schema description: The port the API Server should bind to; type: integer; minimum: 1; maximum: 65535
-  pods: # @schema description: The network ranges from which Pod networks are allocated; type: object
-    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
-    - "192.168.0.0/16"
-  services: # @schema description: The network ranges from which service VIPs are allocated; type: object
-    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
-    - "10.96.0.0/16"
-  serviceDomain: "cluster.local" # @schema description: Kubernetes internal service domain
 
-clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
-clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
+  remoteMachines: # @schema description: Configuration for remote machine pools; type: object
+    controlPlane: # @schema description: Control plane machines configuration; type: array
+      - name: cp-1 # @schema description: Name of the machine; type: string
+        address: 192.168.1.11 # @schema description: IP address or hostname of the machine; type: string
+        port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
+        user: ubuntu # @schema description: SSH user; type: string
+        useSudo: true # @schema description: Whether to use sudo; type: boolean; default: true
+        sshKeyRef: # @schema description: SSH key reference; type: object
+          name: ssh-key # @schema description: Name of the SSH key secret; type: string
+    worker: # @schema description: Worker machines configuration; type: array
+      - name: worker-1 # @schema description: Name of the machine; type: string
+        address: 192.168.1.21 # @schema description: IP address or hostname of the machine; type: string
+        port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
+        user: ubuntu # @schema description: SSH user; type: string
+        useSudo: true # @schema description: Whether to use sudo; type: boolean; default: true
+        sshKeyRef: # @schema description: SSH key reference; type: object
+          name: ssh-key # @schema description: Name of the SSH key secret; type: string
+      - name: worker-2 # @schema description: Name of the machine; type: string
+        address: 192.168.1.22 # @schema description: IP address or hostname of the machine; type: string
+        port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
+        user: ubuntu # @schema description: SSH user; type: string
+        useSudo: true # @schema description: Whether to use sudo; type: boolean; default: true
+        sshKeyRef: # @schema description: SSH key reference; type: object
+          name: ssh-key # @schema description: Name of the SSH key secret; type: string
 
-identityRef: # @schema description: OpenStack cluster identity object reference; type: object; required: true
+clusterNetwork:  # @schema description: The cluster network configuration; type: object
+  podsCIDR: "192.168.0.0/16"
+  servicesCIDR: "10.96.0.0/16"
+
+clusterIdentity: # @schema description: A reference to an identity to be used when reconciling the managed control plane; type: object; required: true
   name: "" # @schema description: Name of the identity; type: string; required: true
-  cloudName: "" # @schema description: Name of the entry in the clouds.yaml file to use; type: string; required: true
-  region: "" # @schema description: OpenStack region; type: string; required: true
-  caCert: # @schema description: Reference to the secret with the content of a custom CA; type: object
-    secretName: "" # @schema description: The name of the secret with a custom CA in kube-system namespace; type: string
-    path: /etc/cacert # @schema description: The directory where the secret with a custom CA will be mounted; type: string
+  kind: "Secret" # @schema description: Kind of the identity; type: string; required: true
 
 
 # K0s parameters
 k0s: # @schema description: K0s parameters; type: object; required: true
   version: v1.32.3+k0s.0 # @schema description: K0s version; type: string; required: true
-  updateStrategy: Recreate # @schema description: K0s update strategy; type: string; required: true; default: Recreate; enum: [Recreate, InPlace]
-  profile: # @schema description: Profile names for CP and worker nodes; type: object
-    manager: "" # @schema description: CP nodes profile name; default: mke-default-manager
-    worker: "" # @schema description: Worker nodes profile name; default: mke-default-worker
+  arch: amd64
+  encryptionConfigSecret: ""
+  clientRootCASecret: ""
   api: # @schema description: Kubernetes API server parameters; type: object
     extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
     profilingEnabled: false # @schema description: K0s profiling install flag value; default: false
@@ -62,10 +79,12 @@ k0s: # @schema description: K0s parameters; type: object; required: true
     alwaysPullImages: false # @schema description: Whether AlwaysPullImages admission plugin enabled; default: false
     requestTimeout: "1m0s" # @schema description: K0s --request-timeout install flag value; default: 1m0s
   network: # @schema description: K0s network configuration; type: object; required: true
-    nodePortRange: "32768-35535" # @schema: description: K0s node port range; required: true; default: 32768-35535
+    provider: "custom"
+    nodePortRange: "33000-35767" # @schema: description: K0s node port range; required: true
     kubeProxy: # @schema description: Kube proxy configuration; type: object; required: true
       metricsBindAddress: 0.0.0.0:10249
       mode: iptables
+    kuberouter: {}
   scheduler: # @schema description: K0s scheduler configuration; type: object; required: true
     profilingEnabled: false # @schema description: Scheduler --profiling extra arg value; default: false
     bindToAll: false # @schema description: Whether --bind-address=127.0.0.1 scheduler extra arg added; default: false
@@ -75,56 +94,56 @@ k0s: # @schema description: K0s parameters; type: object; required: true
     extraArgs: {} # @schema description: Additional controller manager extra args; type: object; additionalProperties: true
   kubelet: # @schema description: K0s kubelet configuration; type: object; required: true
     extraArgs: {} # @schema description: Kubelet extra args; type: object; additionalProperties: true
-    customProfiles: [] # @schema description: List of custom kubelet profiles; type: array; item: object
-    kubeletRootDir: "/var/lib/kubelet" # @schema description: Kubelet root directory; default: /var/lib/kubelet
+    managerProfile: mke-default-manager # @schema description: kubelet profile on CP nodes; type: string; required: true
+    workerProfile: mke-default-worker # @schema description: kubelet profile on worker nodes; type: string; required: true
+    kubeletRootDir: /var/lib/k0s/kubelet # @schema description: kubelet root directory; type: string; required: true
+    workerProfiles: # @schema description: List of kubelet profiles; type: array; item: object; required: true
+      - name: mke-default-worker
+        values:
+          eventRecordQPS: 50
+          kubeReserved:
+            cpu: 50m
+            ephemeral-storage: 500Mi
+            memory: 300Mi
+          maxPods: 110
+          podPidsLimit: -1
+          podsPerCore: 0
+          protectKernelDefaults: false
+          seccompDefault: false
+      - name: mke-default-manager
+        values:
+          eventRecordQPS: 50
+          kubeReserved:
+            cpu: 250m
+            ephemeral-storage: 4Gi
+            memory: 2Gi
+          maxPods: 110
+          podPidsLimit: -1
+          podsPerCore: 0
+          protectKernelDefaults: false
+          seccompDefault: false
   extensions: # @schema description: K0s extensions; type: object; required: true
     repositories: [] # @schema description: K0s extension repositories; type: array; item: object
     charts: [] # @schema description: K0s extension helm charts (e.g. CNI); type: array; item: object
   telemetry: # @schema description: K0s telemetry configuration; type: object; required: true
     enabled: true # @schema description: Whether k0s telemetry enabled; default: false
-  encryptionKey: "" # @schema description: EncryptionConfig key; type: string; required: true
-  clientRootCA: # @schema description: Client root CA certificate; type: object; required: true
-    certificate: "" # @schema description: Client root CA crt part; type: string; required: true
-    key: "" # @schema description: Client root CA ket part; type: string; required: true
   etcd: # @schema description: K0s etcd configuration; type: object; required: true
     storageQuota: "" # @schema description: K0s etc --quota-backend-bytes arg value; type: string
     tlsCipherSuites: [] # @schema description: Etcd --cipher-suites arg values list; type: array; item: string; itemEnum: [TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384,TLS_CHACHA20_POLY1305_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_RSA_WITH_RC4_128_SHA,TLS_RSA_WITH_3DES_EDE_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_256_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA256,TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,TLS_ECDHE_RSA_WITH_RC4_128_SHA,TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256]
 
 registry: # @schema description: Registries configuration; type: object; required: true
-  image: # @schema description: Docker image registry configuration; type: object; required: true
+  imageRegistry: # @schema description: Docker image registry configuration; type: object; required: true
     url: "" # @schema description: Docker registry address; type: string
-    caSecret: "" # @schema description: Secret name that contains docker registry CA certificate (keys ca.crt and ca.key); type: string
+    caData: "" # @schema description: Secret name that contains docker registry CA certificate (keys ca.crt and ca.key); type: string
   chart: # @schema description: Helm repository configuration; type: object; required: true
     url: "" # @schema description: Helm repository address; type: string
-    caSecret: "" # @schema description: Secret name that contains helm repository CA certificate (keys ca.crt and ca.key); type: string
+    caData: "" # @schema description: Secret name that contains helm repository CA certificate (keys ca.crt and ca.key); type: string
 
 mke: # @schema description: MKE configuration; type: object; required: true
   version: 4.1.1 # @schema description: MKE version; type: string; required: true
   authentication: # @schema description: MKE authentication configuration; type: object; required: true
     audience: [] # @schema description: List of additional JWT audiences that will be added to the AuthenticationConfiguration config; type: array; item: string
-
-# Remote machine pools configuration
-remoteMachines: # @schema description: Configuration for remote machine pools; type: object
-  controlPlane: # @schema description: Control plane machines configuration; type: array
-    - name: cp-1 # @schema description: Name of the machine; type: string
-      address: 192.168.1.11 # @schema description: IP address or hostname of the machine; type: string
-      port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
-      user: ubuntu # @schema description: SSH user; type: string
-      useSudo: true # @schema description: Whether to use sudo; type: boolean; default: true
-      sshKeyRef: # @schema description: SSH key reference; type: object
-        name: ssh-key # @schema description: Name of the SSH key secret; type: string
-  worker: # @schema description: Worker machines configuration; type: array
-    - name: worker-1 # @schema description: Name of the machine; type: string
-      address: 192.168.1.21 # @schema description: IP address or hostname of the machine; type: string
-      port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
-      user: ubuntu # @schema description: SSH user; type: string
-      useSudo: true # @schema description: Whether to use sudo; type: boolean; default: true
-      sshKeyRef: # @schema description: SSH key reference; type: object
-        name: ssh-key # @schema description: Name of the SSH key secret; type: string
-    - name: worker-2 # @schema description: Name of the machine; type: string
-      address: 192.168.1.22 # @schema description: IP address or hostname of the machine; type: string
-      port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
-      user: ubuntu # @schema description: SSH user; type: string
-      useSudo: true # @schema description: Whether to use sudo; type: boolean; default: true
-      sshKeyRef: # @schema description: SSH key reference; type: object
-        name: ssh-key # @schema description: Name of the SSH key secret; type: string
+  nginxIngress:
+    nodePorts:
+      http: 30000
+      https: 30001

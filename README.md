@@ -14,7 +14,7 @@ Update the provider to the latest version (will be in k0rdent enterprise 1.1.0)
 
 ```sh
 # Create the provider
-kubectl -n $KCM_NAMESPACE apply -f <<EOF
+kubectl -n $KCM_NAMESPACE apply -f - <<EOF
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ProviderTemplate
 metadata:
@@ -46,12 +46,8 @@ with - --global-k0s-url=https://image-cache-server.k8s.pac.dockerps.io
 
 ```sh
 $ helm package templates/mke4k-remote-cluster-standalone-cp
-$ helm package templates/mke-support-objects
-$ helm package templates/dex-web-static
 
-$ helm push mke4k-remote-cluster-standalone-cp-0.0.1.tgz $REGISTRY
-$ helm push mke-support-objects-0.1.0.tgz $REGISTRY
-$ helm push dex-web-static-0.1.0.tgz $REGISTRY
+$ helm push mke4k-remote-cluster-standalone-cp-0.0.2.tgz $REGISTRY
 
 # Create new HelmRepository
 kubectl -n $KCM_NAMESPACE apply -f - <<EOF
@@ -66,19 +62,6 @@ spec:
   provider: generic
   type: oci
   url: $REGISTRY
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  labels:
-    k0rdent.mirantis.com/managed: "true"
-  name: mirantiscontainers
-spec:
-  interval: 10m0s
-  provider: generic
-  type: oci
-  url: $REGISTRY
-EOF
 ```
 
 Create ServiceTemplates
@@ -94,7 +77,7 @@ kubectl -n $KCM_NAMESPACE apply -f - <<EOF
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterTemplate
 metadata:
-  name: mke4k-remote-cluster-standalone-cp-0-0-1
+  name: mke4k-remote-cluster-standalone-cp-0-0-2
   namespace: k0rdent
 spec:
   helm:
@@ -105,7 +88,7 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: templates-repository
-      version: 0.0.1
+      version: 0.0.2
 EOF
 ```
 
@@ -157,9 +140,65 @@ EOF
 
 # ClusterDeployment
 
+## Generate Private CA Certificate
+
+```bash
+# Create temporary directory
+TEMP_DIR=$(mktemp -d)
+
+# Generate private key
+openssl genrsa -out "$TEMP_DIR/ca.key" 4096
+
+# Generate CA certificate with MKE Client Root CA values
+openssl req -new -x509 -days 3650 -key "$TEMP_DIR/ca.key" -out "$TEMP_DIR/ca.crt" \
+    -subj "/C=US/O=mke/CN=MKE Client Root CA"
+
+# Create CA secret in Kubernetes
+kubectl -n ${KCM_NAMESPACE} create secret generic remote-mke-client-root-ca \
+    --namespace=k0rdent \
+    --from-file=ca.crt="$TEMP_DIR/ca.crt" \
+    --from-file=ca.key="$TEMP_DIR/ca.key"
+
+# Clean up
+rm -rf "$TEMP_DIR"
+```
+
+## Generate Etcd Encryption Secret
+
+```bash
+# Generate 32-byte random key and encode as base64
+ETCD_ENCRYPTION_KEY=$(openssl rand -base64 32)
+
+# Create a temporary file for the EncryptionConfig
+ENCRYPTION_CONFIG_FILE=$(mktemp)
+
+cat > "$ENCRYPTION_CONFIG_FILE" <<EOF
+kind: EncryptionConfig
+apiVersion: v1
+resources:
+  - resources:
+      - secrets
+    providers:
+      - aescbc:
+          keys:
+            - name: key
+              secret: $ETCD_ENCRYPTION_KEY
+EOF
+
+# Create encryption secret in Kubernetes with the EncryptionConfig as the value
+kubectl -n ${KCM_NAMESPACE} create secret generic remote-mke-encryption-config \
+    --from-file=value="$ENCRYPTION_CONFIG_FILE"
+
+# Clean up
+rm -f "$ENCRYPTION_CONFIG_FILE"
+
+```
+
 Edit and adapt contents of `remote-cld.yaml`
-- `apiServerHost` with address of external load balancer
+- `apiServerHost` with IP address of external load balancer
 - `remoteMachines` with informations about the existing virtual machines
+- `mke-aux-objects.values.certificates.allowedIPs` if not using FQDN
+- `authentication.values.config.connectors` for LDAP conf
 
 
 # Issues

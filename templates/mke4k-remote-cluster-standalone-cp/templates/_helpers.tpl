@@ -79,6 +79,22 @@ Required arguments:
 {{- end }}
 
 {{/*
+Prepare the k0s scheduler extraArgs with defaults
+Required arguments:
+1. .Values.k0s.scheduler dict
+*/}}
+{{- define "k0sSchedulerExtraArgs" -}}
+{{- $args := dict
+    "profiling" (toString .profilingEnabled)
+}}
+{{- if not .bindToAll }}
+{{- $_ := set $args "bind-address" "127.0.0.1" }}
+{{- end }}
+{{- $args = mergeOverwrite $args .extraArgs }}
+{{- toYaml $args }}
+{{- end }}
+
+{{/*
 Prepare the k0s kubelet args install flag
 Required arguments:
 1. .Values.k0s.kubelet.extraArgs dict
@@ -89,25 +105,4 @@ Required arguments:
     {{- $argsList = append $argsList (printf "--%s=%s" $key $value) }}
 {{- end }}
 {{- join " " $argsList | quote }}
-{{- end }}
-
-{{/*
-Prepare the OpenStack API load balancer configuration with defaults
-Required arguments:
-1. .Values.apiServerLoadBalancer
-*/}}
-{{- define "apiLoadBalancer" -}}
-{{- $apiServerLoadBalancer := default dict . }}
-{{- $additionalPorts := default list $apiServerLoadBalancer.additionalPorts }}
-{{- $containsMKEPort := false }}
-{{- range $port := $additionalPorts }}
-    {{- if eq "33001" (toString $port) }}
-        {{- $containsMKEPort = true }}
-    {{- end }}
-{{- end }}
-{{- if not $containsMKEPort }}
-    {{- $additionalPorts = append $additionalPorts 33001 }}
-{{- end }}
-{{- $_ := set $apiServerLoadBalancer "additionalPorts" $additionalPorts }}
-{{- toYaml $apiServerLoadBalancer }}
 {{- end }}

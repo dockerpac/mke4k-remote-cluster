@@ -6,11 +6,8 @@ metadata:
 spec:
   template:
     spec:
-      {{- if $global.k0sURL }}
-      downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-amd64"
-      {{- end }}
       files:
-        {{- if or .Values.registry.image.caSecret .Values.registry.chart.caSecret }}
+        {{- if or .Values.registry.imageRegistry.caData .Values.registry.chartRegistry.caData }}
         - content: |
             version = 2
             
@@ -19,35 +16,18 @@ spec:
           path: "/etc/k0s/containerd.d/registry-config.toml"
           permissions: "0644"
           {{- range $_, $registryData := .Values.registry }}
-            {{- if $registryData.caSecret }}
-        - contentFrom:
-            secretRef:
-              name: {{ $registryData.caSecret }}
-              key: ca.crt
+            {{- if $registryData.caData }}
+        - content: |
+            {{ $registryData.caData | nindent 8 }}
           permissions: "0664"
           path: /etc/containerd/certs.d/{{ (urlParse $registryData.url).host }}/ca.crt
             {{- end }}
           {{- end }}
         {{- end }}
-        {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
-        {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
-        {{- range $path, $secret := $certs }}
-        {{- if $secret }}
-        - contentFrom:
-            secretRef:
-              name: {{ $secret }}
-              key: ca.crt
-          permissions: "0664"
-          path: /usr/local/share/ca-certificates/{{ $path }}
-        {{- end }}
-        {{- end }}
-      preStartCommands:
-      - "sudo update-ca-certificates"
-      {{- end }}
       useSystemHostname: true
       args:
       - --debug=true
       - --kubelet-extra-args={{ include "kubeletArgs" .Values.k0s.kubelet.extraArgs }}
       - --kubelet-root-dir={{ default "/var/lib/kubelet" .Values.k0s.kubelet.kubeletRootDir }}
-      - --profile={{ default "mke-default-worker" .Values.k0s.profile.worker }}
+      - --profile={{ default "mke-default-worker" .Values.k0s.kubelet.workerProfile }}
       version: {{ .Values.k0s.version }}

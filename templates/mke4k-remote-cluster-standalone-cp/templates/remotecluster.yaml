@@ -4,5 +4,5 @@ metadata:
   name: {{ include "cluster.name" . }}
 spec:
   controlPlaneEndpoint:
-    host: {{ .Values.clusterNetwork.apiServerHost }}
-    port: {{ .Values.clusterNetwork.apiServerPort }}
+    host: {{ .Values.infrastructure.apiServerHost }}
+    port: {{ .Values.infrastructure.apiServerPort }}
